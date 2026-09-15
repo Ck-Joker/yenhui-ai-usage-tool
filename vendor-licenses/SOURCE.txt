@@ -1,0 +1,2 @@
+Python runtime third-party notices from https://github.com/astral-sh/python-build-standalone/tree/e8de8809acd066146370e3b18cf4645a8ff426f0
+Collection includes notices for optional components; inclusion does not imply every component is linked.

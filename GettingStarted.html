@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-Hant"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Subscription Pin｜安裝與登入指南</title>
+<style>
+body{margin:0;background:#f3f5f7;color:#202733;font:16px/1.8 -apple-system,BlinkMacSystemFont,"PingFang TC",sans-serif}main{max-width:780px;margin:40px auto;padding:36px;background:white;border-radius:18px}h1{font-size:30px;line-height:1.35}h2{font-size:21px;margin-top:32px}a{color:#0a6eb1}code{background:#edf1f5;padding:3px 7px;border-radius:5px;font-size:14px}li{margin:10px 0}.meta{color:#566475;font-size:14px}.note{padding:16px 20px;background:#f0f6fc;border-left:4px solid #0a6eb1;border-radius:6px}.brand{display:flex;align-items:center;gap:8px;font-size:13px;color:#667385;border-top:1px solid #e2e7ec;margin-top:32px;padding-top:18px}.brand img{width:22px;height:22px}@media(max-width:600px){main{margin:12px;padding:22px}h1{font-size:25px}}
+</style><main>
+<p class="meta">Subscription Pin 1.1.0 · macOS · Apple silicon</p>
+<h1>安裝浮窗，用自己的帳號查看剩餘用量</h1>
+<p>這個小工具讓你隨時查看 Codex、Claude Code 與平台提供的 Fable 額度。安裝包不含開發者的帳號或登入資料；每位使用者都需要在自己的 Mac 完成登入。</p>
+<div class="note"><strong>安裝前確認</strong><br>需要 Apple silicon Mac（M 系列晶片），系統最低 macOS 13。此版未提供 Intel 版本；目前實機驗證為 macOS 26。已內附執行元件，不需要另外安裝 Python 或 Xcode。兩個平台各自需要能提供訂閱額度的帳號，API 金鑰不能代替訂閱登入。</div>
+<h2>1　把 App 放進「應用程式」</h2>
+<ol><li>開啟收到的 <strong>Subscription-Pin-1.1.0-AppleSilicon.dmg</strong>。</li><li>將 <strong>Subscription Pin.app</strong> 拖曳到視窗中的 <strong>Applications</strong> 資料夾。</li><li>從 Finder 的「應用程式」開啟 Subscription Pin，再退出 DMG。請勿一直從安裝映像內執行。</li></ol>
+<p>這份分享版尚未取得 Apple Developer ID 簽署與公證。若 macOS 阻擋開啟，請先確認檔案確實來自你信任的提供者，再依「系統設定 → 隱私權與安全性 → 強制打開」完成系統確認。若顯示惡意軟體、檔案損毀或公司管理限制，請停止並聯絡提供者，不要停用系統保護。詳見 <a href="https://support.apple.com/zh-tw/102445">Apple 官方開啟 App 說明</a>。</p>
+<h2>2　登入自己的 Codex</h2>
+<p>在引導視窗按「Codex 安裝說明」，依 <a href="https://developers.openai.com/codex/app/">OpenAI 官方說明</a>安裝 App，並登入自己的 ChatGPT 訂閱帳號。官方下載頁目前使用 ChatGPT 桌面 App 名稱，既有 Codex App 也可使用。已安裝者可按「開啟 Codex」。只使用 Codex CLI 的使用者，請先在終端機執行 <code>codex login</code> 完成登入。</p>
+<h2>3　登入自己的 Claude Code</h2>
+<ol><li>按引導視窗的「Claude Code 安裝說明」，依 <a href="https://code.claude.com/docs/en/quickstart">Claude Code 官方快速入門</a>安裝 CLI。</li><li>按「複製登入指令」，再按「開啟終端機」，貼上 <code>claude auth login</code> 並按 Enter。</li><li>依開啟的瀏覽器提示，登入自己的 Claude 訂閱帳號並完成官方要求的驗證。只有登入 Claude 桌面聊天 App，可能不足以提供 CLI 的登入資訊。</li></ol>
+<p>若看到 <code>command not found</code>，請先完成官方安裝，關閉再開啟終端機。原生安裝的 CLI 也可使用 <code>~/.local/bin/claude auth login</code>。</p>
+<h2>4　同意讀取並驗證</h2>
+<ol><li>回到 Subscription Pin，勾選「我同意讀取這台 Mac 上自己的訂閱用量」。</li><li>按「驗證連線」。如果 macOS 詢問鑰匙圈存取，請核對為本工具的 <strong>usage-helper</strong>。本工具只讀取既有登入，不會要求你把密碼或 token 貼進小工具。</li><li>確認每個已登入的平台顯示「已驗證」，再按「開始使用浮窗」。至少一個平台成功即可使用，另一個可稍後從選單列「登入與使用引導」補設。</li></ol>
+<p>浮窗會顯示剩餘百分比與單行重置倒數。未提供的額度不會補成 100%；Fable 只有平台回傳時才會出現，不能與一般週額度相加。</p>
+<h2>日常使用與常見狀態</h2>
+<ul><li><strong>固定位置：</strong>拖曳標題或背景到適合的位置，按圖釘保持最上層，再按鎖頭鎖定。精簡版寬 180px。</li><li><strong>更新：</strong>Codex 至少間隔 1 分鐘，Claude 至少間隔 5 分鐘。按更新、重新開啟或喚醒，都沿用冷卻期限；倒數每 15 秒在本機更新。</li><li><strong>查詢冷卻：</strong>等畫面倒數結束。Claude 遇到限流時依序等待至少 10、20、40、60 分鐘，或遵守平台要求的更長時間，不需反覆重新登入。</li><li><strong>請更新登入：</strong>開啟對應平台檢查登入。Claude 可再次執行 <code>claude auth login</code>；完成後等下一次排程更新。</li><li><strong>收起／結束：</strong>從 macOS 選單列的 C／A／F 用量選單操作；也可在浮窗按右鍵。系統安全提示或部分全螢幕 App 仍可能蓋住浮窗。</li></ul>
+<h2>資料保存與移除</h2>
+<p>Codex 透過官方 App Server 讀取本機登入帳號；Claude 使用這台 Mac 鑰匙圈中的 Claude Code 憑證，向 Anthropic 用量端點查詢。憑證僅在程序記憶體中使用，不寫入用量快取，也不送往言回伺服器。本工具不購買點數，不消耗重置券，也不執行模型推論。</p>
+<p>本機只保存查詢結果、冷卻期限與顯示偏好。用量資料位於使用者的 <code>~/Library/Application Support/Subscription Pin</code>，偏好位於 macOS 的 <code>tw.ckc.subscription-pin</code> 設定網域。平常請保留冷卻資料，避免失去限流保護。平台登入仍由各自的官方工具管理。</p>
+<p>移除時先結束 Subscription Pin，再將 App 移到垃圾桶即可；不會登出 Codex 或 Claude Code。需要清除本工具的本機資料時，可另將上述用量資料夾移到垃圾桶。Claude 用量端點可能隨官方版本改變，若持續無法查詢，請向提供者取得更新版。</p>
+<div class="brand"><img alt="言回 logo" src="data:image/svg+xml;base64,BRAND_IMAGE">言回有限公司開發</div>
+</main></html>
