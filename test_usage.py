@@ -160,6 +160,152 @@ print(json.dumps(usage.scheduled_fetch('claude', fetch, directory)))
         self.assertNotIn('FAKE_PRIVATE_VALUE', (Path(self.directory.name) / 'claude.json').read_text())
 
 
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = json.dumps(payload).encode()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, limit):
+        return self.payload[:limit]
+
+
+class ClaudeRefreshTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.now = 2_000_000
+        self.keychain = {'accessToken': 'FAKE_PRIVATE_VALUE', 'expiresAt': (self.now - 10) * 1000,
+                         'refreshToken': 'FAKE_PRIVATE_REFRESH',
+                         'refreshTokenExpiresAt': (self.now + 86400) * 1000}
+        self.cli_calls = []
+        self.cli_effect = self.renew
+        self.headers = []
+        patches = [patch('usage.subprocess.run', side_effect=self.fake_run),
+                   patch('usage.claude_path', return_value='/fake/bin/claude'),
+                   patch('usage.urllib.request.build_opener', side_effect=self.opener),
+                   patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'FAKE_PRIVATE_VALUE',
+                                           'DYLD_LIBRARY_PATH': '/fake/pyinstaller'})]
+        for item in patches:
+            item.start()
+            self.addCleanup(item.stop)
+
+    def renew(self):
+        self.keychain.update(accessToken='FAKE_RENEWED_VALUE', expiresAt=(self.now + 28800) * 1000)
+
+    def fake_run(self, args, **kwargs):
+        if args[0] == '/usr/bin/security':
+            stdout = json.dumps({'claudeAiOauth': self.keychain}).encode()
+            return type('Result', (), {'returncode': 0, 'stdout': stdout})()
+        self.cli_calls.append((args, kwargs))
+        if self.cli_effect:
+            self.cli_effect()
+        return type('Result', (), {'returncode': 0})()
+
+    def opener(self, *handlers):
+        test = self
+        class Opener:
+            def open(self, request, timeout):
+                test.headers.append(request.get_header('Authorization'))
+                return FakeResponse({'five_hour': {'utilization': 7}})
+        return Opener()
+
+    def fetch(self):
+        return usage.fetch_claude(self.directory.name, lambda: self.now)
+
+    def record(self):
+        return Path(self.directory.name) / 'claude-refresh.json'
+
+    def test_expired_token_is_renewed_by_claude_code_with_clean_environment(self):
+        cards = self.fetch()
+        self.assertEqual(cards[0]['windows'][0]['remaining'], 93)
+        self.assertEqual(len(self.cli_calls), 1)
+        args, kwargs = self.cli_calls[0]
+        self.assertEqual(args, ['/fake/bin/claude'] + usage.CLAUDE_REFRESH_ARGS)
+        self.assertLessEqual(set(kwargs['env']), {'HOME', 'LANG', 'TERM', 'DISABLE_AUTOUPDATER',
+                                                  'PATH', 'USER', 'LOGNAME', 'TMPDIR'})
+        self.assertTrue(kwargs['env']['PATH'].startswith('/fake/bin:'))
+        self.assertEqual(kwargs['timeout'], usage.CLAUDE_REFRESH_TIMEOUT)
+        self.assertEqual(kwargs['cwd'], self.directory.name)
+        for stream in ['stdin', 'stdout', 'stderr']:
+            self.assertEqual(kwargs[stream], subprocess.DEVNULL)
+        self.assertEqual(self.headers, ['Bearer FAKE_RENEWED_VALUE'])
+        self.assertEqual(self.record().stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads(self.record().read_text()), {'version': 1, 'attemptedAt': self.now})
+        self.assertNotIn('FAKE_', self.record().read_text())
+
+    def test_valid_token_never_runs_claude_code(self):
+        self.keychain['expiresAt'] = (self.now + 60) * 1000
+        self.fetch()
+        self.assertEqual(self.cli_calls, [])
+        self.assertFalse(self.record().exists())
+        self.assertEqual(self.headers, ['Bearer FAKE_PRIVATE_VALUE'])
+
+    def test_failed_renewal_waits_for_cooldown(self):
+        self.cli_effect = None
+        for moment, calls in [(self.now, 1), (self.now + 1799, 1), (self.now + 1800, 2)]:
+            self.now = moment
+            with self.assertRaises(usage.UsageError) as raised:
+                self.fetch()
+            self.assertEqual(str(raised.exception), usage.CLAUDE_REFRESH_FAILED)
+            self.assertIn('登入', str(raised.exception))
+            self.assertEqual(len(self.cli_calls), calls)
+        self.assertEqual(self.headers, [])
+
+    def test_expired_refresh_token_requires_login_without_running_cli(self):
+        self.keychain['refreshTokenExpiresAt'] = self.now * 1000
+        with self.assertRaises(usage.UsageError) as raised:
+            self.fetch()
+        self.assertEqual(str(raised.exception), usage.CLAUDE_LOGIN_EXPIRED)
+        self.assertEqual(self.cli_calls, [])
+        self.assertFalse(self.record().exists())
+
+    def test_missing_cli_explains_login_command(self):
+        with patch('usage.claude_path', return_value=None), self.assertRaises(usage.UsageError) as raised:
+            self.fetch()
+        self.assertIn('claude auth login', str(raised.exception))
+        self.assertEqual(self.cli_calls, [])
+
+    def test_cli_timeout_or_launch_failure_keeps_reservation(self):
+        for error in [subprocess.TimeoutExpired('claude', 20), OSError()]:
+            def fail():
+                raise error
+            self.cli_effect = fail
+            with self.assertRaises(usage.UsageError):
+                self.fetch()
+            self.assertEqual(json.loads(self.record().read_text())['attemptedAt'], self.now)
+            self.now += usage.CLAUDE_REFRESH_COOLDOWN
+        self.assertEqual(len(self.cli_calls), 2)
+
+    def test_corrupt_record_is_replaced_before_one_attempt(self):
+        self.record().write_text('{broken')
+        self.fetch()
+        self.assertEqual(len(self.cli_calls), 1)
+        self.assertEqual(json.loads(self.record().read_text())['attemptedAt'], self.now)
+
+    def test_scheduled_state_contract_and_secrets_unchanged(self):
+        result = usage.scheduled_fetch('claude', self.fetch, self.directory.name, lambda: self.now)
+        self.assertIsNone(result['error'])
+        state = (Path(self.directory.name) / 'claude.json').read_text()
+        self.assertEqual(set(json.loads(state)), {'provider', 'cards', 'updatedAt', 'error', 'version',
+                         'failures', 'nextAllowedAt', 'staleAfter', 'cached', 'rateLimited'})
+        self.assertNotIn('FAKE_', state + json.dumps(result))
+
+    def test_claude_path_override_requires_executable(self):
+        with tempfile.TemporaryDirectory() as folder:
+            candidate = Path(folder) / 'claude'
+            candidate.write_text('#!/bin/sh\n')
+            patch.stopall()
+            with patch.dict(os.environ, {'SUBSCRIPTION_PIN_CLAUDE': str(candidate)}):
+                self.assertNotEqual(usage.claude_path(), str(candidate))
+                candidate.chmod(0o700)
+                self.assertEqual(usage.claude_path(), str(candidate))
+
+
 class UsageTests(unittest.TestCase):
     def test_missing_recipient_credentials_never_falls_back_to_developer(self):
         result = type('Result', (), {'returncode': 44, 'stdout': b''})()

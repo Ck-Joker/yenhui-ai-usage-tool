@@ -58,7 +58,7 @@ final class SetupWindow: NSWindowController {
         buttons([("Claude Code 安裝說明", #selector(claudeGuide)),
                  ("複製登入指令", #selector(copyLogin)), ("開啟終端機", #selector(openTerminal))])
         text("3　同意讀取用量，驗證連線", size: 15, bold: true)
-        text("程式會向兩個平台讀取你的用量。Claude 登入憑證僅在記憶體使用；本機只保存用量與冷卻時間。若 macOS 詢問鑰匙圈存取，請核對為本工具的 usage-helper。", size: 12)
+        text("程式會向兩個平台讀取你的用量。Claude 登入憑證僅在記憶體使用；登入到期時，會透過 Claude Code 送出一次極小請求換發登入，少量計入 Claude 用量。本機只保存用量與冷卻時間。若 macOS 詢問鑰匙圈存取，請核對為本工具的 usage-helper。", size: 12)
         consent = NSButton(checkboxWithTitle: "我同意讀取這台 Mac 上自己的訂閱用量", target: self, action: #selector(consentChanged))
         content.addArrangedSubview(consent)
         let actions = NSStackView()

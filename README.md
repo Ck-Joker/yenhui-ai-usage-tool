@@ -17,7 +17,7 @@
 
 ## 安裝與登入
 
-1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.1.0-AppleSilicon.dmg`。
+1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.1.1-AppleSilicon.dmg`。
 2. 開啟 DMG，將 **Subscription Pin.app** 拖到 **Applications**，再從「應用程式」開啟。
 3. 依首次使用引導，安裝並登入自己的 Codex。程式提供 [OpenAI 官方安裝說明](https://developers.openai.com/codex/app/)入口；官方下載頁目前使用 ChatGPT 桌面 App 名稱，既有 Codex App 也可使用。
 4. 依 [Claude Code 官方說明](https://code.claude.com/docs/en/quickstart)安裝 CLI。在終端機執行 `claude auth login`，於瀏覽器完成自己的帳號登入與驗證。僅登入 Claude 桌面聊天 App，可能不足以提供 CLI 的登入資訊。
@@ -48,6 +48,7 @@ DMG 內另外附有可離線開啟的「安裝與登入指南.html」。GitHub �
 | 畫面倒數 | 每 15 秒在本機更新，不增加查詢 |
 | 手動更新、重開與喚醒 | 共用保存的冷卻期限，不強制繞過限制 |
 | Claude 回傳限流 | 依序等待至少 10、20、40、60 分鐘；平台要求更久時遵守較長時間 |
+| Claude 登入到期 | 自動請 Claude Code 換發，每 30 分鐘最多嘗試一次 |
 
 Claude 百分比可能有約 5 分鐘的更新延遲。其他工具的查詢也可能影響平台上限，因此無法保證永不出現限流。
 
@@ -59,15 +60,16 @@ Claude 百分比可能有約 5 分鐘的更新延遲。其他工具的查詢也�
 
 - Codex 透過本機官方 App Server 讀取訂閱用量。
 - Claude 只讀取安裝者 Mac 鑰匙圈中的既有 Claude Code 登入，向 Anthropic 的用量端點查詢。
-- 憑證只在程序記憶體中使用，不寫進快取，不送到言回伺服器。程式不自行更新共享的登入憑證。
+- 憑證只在程序記憶體中使用，不寫進快取，不送到言回伺服器。
+- Claude Code 的登入每隔數小時需要換發。到期時，程式會執行本機的 `claude` 指令送出一次極小的 Haiku 請求，由 Claude Code 自行完成換發；本程式不使用也不改寫 refresh token。每 30 分鐘最多嘗試一次，會少量計入 Claude 用量。
 - 本機只保存用量結果、冷卻期限與顯示偏好。分享包不複製 `.codex`、`.claude`、鑰匙圈、cookie、用量快取或偏好檔。
-- 不執行模型推論，不購買點數，也不兌換重置券。
+- 除了上述登入換發的極小請求，不執行模型推論，不購買點數，也不兌換重置券。
 
 用量與冷卻狀態存於 `~/Library/Application Support/Subscription Pin`；視窗偏好使用 macOS 設定網域 `tw.ckc.subscription-pin`。平常請保留冷卻資料，避免失去查詢保護。
 
 ## 常見問題
 
-**顯示「請更新登入」**：開啟對應平台檢查登入。Claude 可執行 `claude auth login`，完成後等待下一次排程；按更新仍遵守冷卻期限。
+**顯示「請更新登入」**：Claude 平常會自動換發登入。仍出現提示時，將滑鼠停在圖示上查看原因，常見有三種：長效登入到期，找不到 `claude` 指令，或自動換發未成功。請在終端機執行 `claude auth login`，完成後等待下一次排程；按更新仍遵守冷卻期限。Codex 請開啟 Codex 檢查登入。
 
 **顯示「查詢冷卻」**：等畫面倒數結束即可，不需反覆重新登入。
 
@@ -96,6 +98,6 @@ python package.py
 
 ## 限制與權利說明
 
-Claude 的 OAuth 用量端點不是承諾穩定的公開 API，官方變動時可能需要更新。macOS 安全提示與部分全螢幕 App 仍可能蓋住浮窗。
+Claude 的 OAuth 用量端點不是承諾穩定的公開 API，自動換發也依賴 Claude Code 的現行行為，官方變動時可能需要更新。macOS 安全提示與部分全螢幕 App 仍可能蓋住浮窗。
 
 言回有限公司開發。本專案公開提供程式碼、安裝包與使用說明，未另授予通用開源授權。第三方執行元件依 App 內 `Licenses` 的各自授權；Codex、Claude 的名稱與圖示屬各權利人，用於辨識服務。本工具並非 OpenAI 或 Anthropic 官方產品。

@@ -202,7 +202,29 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise UsageError('Claude 用量端點已變更，請更新此程式')
 
 
-def fetch_claude():
+CLAUDE_REFRESH_COOLDOWN = 1800
+CLAUDE_REFRESH_TIMEOUT = 20
+# 只為了讓 Claude Code 自行換發登入：停用工具、MCP、設定檔與 session，請求量約數百 token。
+CLAUDE_REFRESH_ARGS = ['-p', 'Reply with exactly: ok', '--model', 'haiku',
+                       '--no-session-persistence', '--tools', '', '--strict-mcp-config',
+                       '--mcp-config', '{"mcpServers":{}}', '--setting-sources', '',
+                       '--disable-slash-commands', '--system-prompt', 'Reply with exactly: ok']
+CLAUDE_LOGIN_EXPIRED = 'Claude 登入已到期，請在終端機執行 claude auth login'
+CLAUDE_REFRESH_FAILED = 'Claude 登入自動更新未成功，約 30 分鐘後再試，或在終端機執行 claude auth login'
+
+
+def claude_path():
+    candidates = [os.environ.get('SUBSCRIPTION_PIN_CLAUDE', ''),
+                  str(Path.home() / '.local/bin/claude'), shutil.which('claude') or '',
+                  '/opt/homebrew/bin/claude', '/usr/local/bin/claude',
+                  str(Path.home() / '.claude/local/claude')]
+    for path in candidates:
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
+def read_claude_auth():
     result = subprocess.run(['/usr/bin/security', 'find-generic-password', '-s',
                              'Claude Code-credentials', '-w'], capture_output=True, timeout=15)
     if result.returncode:
@@ -214,10 +236,57 @@ def fetch_claude():
         raise UsageError('Claude 登入格式不符，請重新登入 Claude Code')
     if not isinstance(token, str) or not token:
         raise UsageError('請先在 Claude Code 登入訂閱帳號')
-    # 不自行 refresh，避免與 Claude Code 的 refresh token 輪替競跑。
+    return auth
+
+
+def claude_expired(auth, now):
     expiry = number(auth.get('expiresAt'))
-    if expiry and expiry / 1000 <= time.time():
-        raise UsageError('Claude 登入已到期，請開啟 Claude Code 更新登入後再重新整理')
+    return bool(expiry) and expiry / 1000 <= now
+
+
+def refresh_claude_login(auth, state_dir=None, clock=time.time):
+    """access token 到期時，請官方 Claude Code 自行換發；本程式不使用也不改寫 refresh token。"""
+    refresh_expiry = number(auth.get('refreshTokenExpiresAt'))
+    if refresh_expiry and refresh_expiry / 1000 <= clock():
+        raise UsageError(CLAUDE_LOGIN_EXPIRED)
+    path = claude_path()
+    if not path:
+        raise UsageError('Claude 登入已到期，找不到 claude 指令，請安裝 Claude Code 後執行 claude auth login')
+    directory = Path(state_dir) if state_dir is not None else STATE_DIR
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    record = directory / 'claude-refresh.json'
+    try:
+        attempted = number(json.loads(record.read_text()).get('attemptedAt'))
+    except (OSError, ValueError, AttributeError):
+        attempted = None
+    if attempted is not None and 0 <= clock() - attempted < CLAUDE_REFRESH_COOLDOWN:
+        raise UsageError(CLAUDE_REFRESH_FAILED)
+    # 先保存嘗試時間；程序中斷或寫入失敗都不會連續呼叫 Claude Code。
+    write_state(record, {'version': 1, 'attemptedAt': clock()})
+    env = {'HOME': str(Path.home()), 'LANG': 'en_US.UTF-8', 'TERM': 'dumb', 'DISABLE_AUTOUPDATER': '1',
+           'PATH': ':'.join([os.path.dirname(path), '/opt/homebrew/bin', '/usr/local/bin',
+                             '/usr/bin', '/bin', '/usr/sbin', '/sbin'])}
+    for key in ('USER', 'LOGNAME', 'TMPDIR'):
+        if os.environ.get(key):
+            env[key] = os.environ[key]
+    try:
+        subprocess.run([path] + CLAUDE_REFRESH_ARGS, cwd=str(directory), env=env,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=CLAUDE_REFRESH_TIMEOUT)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    # 以鑰匙圈實際期限判斷，不依賴 CLI 結束碼。
+    refreshed = read_claude_auth()
+    if claude_expired(refreshed, clock()):
+        raise UsageError(CLAUDE_REFRESH_FAILED)
+    return refreshed
+
+
+def fetch_claude(state_dir=None, clock=time.time):
+    auth = read_claude_auth()
+    if claude_expired(auth, clock()):
+        auth = refresh_claude_login(auth, state_dir, clock)
+    token = auth['accessToken']
     request = urllib.request.Request('https://api.anthropic.com/api/oauth/usage', headers={
         'Authorization': 'Bearer ' + token, 'anthropic-beta': 'oauth-2025-04-20',
         'User-Agent': 'subscription-pin/1.0'})
