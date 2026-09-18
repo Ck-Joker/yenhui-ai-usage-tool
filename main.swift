@@ -68,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var nextRefresh = Date.distantPast
     private var lastAttempt = Date.distantPast
     private var setupWindow: SetupWindow?
+    private var renderedCompact: Bool?
+    private var isApplyingPanelSize = false
     private let defaults = UserDefaults.standard
     private var topmost: Bool { defaults.bool(forKey: "topmost") }
     private var locked: Bool { defaults.bool(forKey: "locked") }
@@ -79,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         createStatusItem()
         panel = UsagePanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 350),
-                           styleMask: [.borderless, .nonactivatingPanel],
+                           styleMask: [.borderless, .nonactivatingPanel, .resizable],
                            backing: .buffered, defer: false)
         panel.title = "Subscription Pin"
         panel.titleVisibility = .hidden
@@ -187,6 +189,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         view.widthAnchor.constraint(equalTo: parent.widthAnchor).isActive = true
     }
 
+    private func savedPanelSize(compact: Bool) -> NSSize? {
+        let prefix = compact ? "compact" : "expanded"
+        guard defaults.object(forKey: "\(prefix)Width") != nil,
+              defaults.object(forKey: "\(prefix)Height") != nil else { return nil }
+        return NSSize(width: defaults.double(forKey: "\(prefix)Width"),
+                      height: defaults.double(forKey: "\(prefix)Height"))
+    }
+
+    private func configurePanelSize(defaultSize: NSSize, minimumSize: NSSize, maximumSize: NSSize) {
+        panel.contentMinSize = minimumSize
+        panel.contentMaxSize = maximumSize
+        let modeChanged = renderedCompact != compact
+        var target = panel.frame.size
+        if modeChanged { target = savedPanelSize(compact: compact) ?? defaultSize }
+        target.width = min(max(target.width, minimumSize.width), maximumSize.width)
+        target.height = min(max(target.height, minimumSize.height), maximumSize.height)
+        renderedCompact = compact
+        guard panel.frame.size != target else { return }
+        let top = panel.frame.maxY
+        isApplyingPanelSize = true
+        panel.setFrame(NSRect(x: panel.frame.minX, y: top - target.height,
+                              width: target.width, height: target.height), display: true)
+        isApplyingPanelSize = false
+    }
+
     private func dateText(_ epoch: Double) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "zh_TW")
@@ -282,7 +309,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func render() {
         guard panel != nil else { return }
         if compact { renderCompact(); return }
-        let top = panel.frame.maxY
         let background = NSVisualEffectView()
         background.material = .hudWindow
         background.blendingMode = .behindWindow
@@ -331,11 +357,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fullWidth(row([label(note, size: 10, color: .secondaryLabelColor), spacer(), refreshButton,
                        button("收起", symbol: "minus", action: #selector(toggleVisible))]), in: stack)
         fullWidth(label("手動更新也遵守查詢間隔 · 倒數在本機更新", size: 10, color: .tertiaryLabelColor), in: stack)
-        fullWidth(row([brandLogo(size: 16), label("言回有限公司開發", size: 10, color: .secondaryLabelColor)]), in: stack)
+        fullWidth(row([spacer(), brandLogo(size: 16),
+                       label("言回有限公司", size: 10, color: .secondaryLabelColor)]), in: stack)
         // 依真實資料列改高度，視窗頂端與使用者拖曳位置保持不變。
         background.layoutSubtreeIfNeeded()
-        let height = max(240, stack.fittingSize.height + 28)
-        panel.setFrame(NSRect(x: panel.frame.minX, y: top - height, width: 360, height: height), display: true)
+        let naturalHeight = max(240, stack.fittingSize.height + 28)
+        configurePanelSize(defaultSize: NSSize(width: 360, height: naturalHeight),
+                           minimumSize: NSSize(width: 360, height: naturalHeight),
+                           maximumSize: NSSize(width: 720, height: 900))
         keepOnScreen()
         updateMenuNumbers()
     }
@@ -349,9 +378,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return Array(rows.prefix(2))
         }
         let rowCount = visibleWindows.reduce(0) { $0 + max(1, $1.count) }
-        let height: CGFloat = 160 + CGFloat(max(0, rowCount - 4) * 24)
-        let top = panel.frame.maxY
-        let background = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: 180, height: height))
+        let naturalHeight: CGFloat = 64 + CGFloat(rowCount * 24)
+        // 先解除完整版 stack 的固有高度，否則 AppKit 會拒絕縮回迷你版尺寸。
+        if renderedCompact != true { panel.contentView = NSView() }
+        configurePanelSize(defaultSize: NSSize(width: 180, height: naturalHeight),
+                           minimumSize: NSSize(width: 180, height: naturalHeight),
+                           maximumSize: NSSize(width: 420, height: 520))
+        let width = panel.frame.width
+        let height = panel.frame.height
+        let background = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: width, height: height))
         background.material = .hudWindow
         background.blendingMode = .behindWindow
         background.state = .active
@@ -363,7 +398,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let title = DragTitle(labelWithString: "剩餘 · 重置倒數")
         title.font = .systemFont(ofSize: 9, weight: .medium)
         title.textColor = .secondaryLabelColor
-        title.frame = NSRect(x: 8, y: height - 23, width: 83, height: 16)
+        let controlsWidth: CGFloat = 80
+        title.frame = NSRect(x: 8, y: height - 23, width: max(40, width - controlsWidth - 24), height: 16)
         title.toolTip = locked ? "先解除鎖定即可移動" : "拖曳這裡移動浮窗"
         background.addSubview(title)
         let controls: [(String, String, Selector, Bool)] = [
@@ -375,7 +411,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let control = button(item.0, symbol: item.1, action: item.2, active: item.3)
             control.title = ""
             control.imagePosition = .imageOnly
-            control.frame = NSRect(x: CGFloat(91 + index * 20), y: height - 25, width: 20, height: 20)
+            control.frame = NSRect(x: width - 8 - controlsWidth + CGFloat(index * 20),
+                                   y: height - 25, width: 20, height: 20)
             if index == 3 { control.isEnabled = !loading }
             background.addSubview(control)
         }
@@ -388,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return view
         }
         func divider(_ y: CGFloat) {
-            let line = NSBox(frame: NSRect(x: 8, y: y, width: 164, height: 1))
+            let line = NSBox(frame: NSRect(x: 8, y: y, width: width - 16, height: 1))
             line.boxType = .separator
             background.addSubview(line)
         }
@@ -410,11 +447,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let message = provider?.rateLimited == true ? "查詢冷卻 · \(provider?.nextAllowedAt.map(countdown) ?? "稍後")" :
                     error.contains("登入") ? "請更新登入" : "暫時無法更新"
                 let field = addText(message,
-                    NSRect(x: 31, y: cursorY + 5, width: 141, height: 18), 11, .medium, .secondaryLabelColor)
+                    NSRect(x: 31, y: cursorY + 5, width: width - 39, height: 18), 11, .medium, .secondaryLabelColor)
                 field.toolTip = error
                 cursorY -= 24
             } else if visibleWindows[index].isEmpty {
-                _ = addText(loading ? "讀取中…" : "尚未提供額度", NSRect(x: 31, y: cursorY + 5, width: 141, height: 18), 11, .regular, .secondaryLabelColor)
+                _ = addText(loading ? "讀取中…" : "尚未提供額度", NSRect(x: 31, y: cursorY + 5, width: width - 39, height: 18), 11, .regular, .secondaryLabelColor)
                 cursorY -= 24
             } else {
                 for quota in visibleWindows[index] {
@@ -428,7 +465,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         NSRect(x: 60, y: cursorY + 1, width: 46, height: 24), 16, .semibold, color)
                     value.font = .monospacedDigitSystemFont(ofSize: quota.remaining >= 100 ? 14 : 16, weight: .semibold)
                     let remainingTime = invalid ? "等待更新" : quota.resetsAt.map(countdown) ?? "未提供"
-                    let reset = addText(remainingTime, NSRect(x: 108, y: cursorY + 7, width: 64, height: 13), 9, .regular, .secondaryLabelColor)
+                    let reset = addText(remainingTime, NSRect(x: 108, y: cursorY + 7, width: width - 116, height: 13), 9, .regular, .secondaryLabelColor)
                     reset.toolTip = invalid ? "正在等待服務確認重置" : "\(remainingTime)後重置"
                     reset.setAccessibilityLabel("\(name) \(quota.label)，\(remainingTime)後重置")
                     value.toolTip = "\(name) \(quota.label)剩餘額度"
@@ -439,12 +476,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         divider(17)
         let status = loading ? "更新中…" : failure != nil ? "更新失敗" : queryStatus
-        let footer = addText(status, NSRect(x: 8, y: 3, width: 146, height: 12), 9, .regular, .tertiaryLabelColor)
+        let footer = addText(status, NSRect(x: 8, y: 3, width: width - 34, height: 12), 9, .regular, .tertiaryLabelColor)
         footer.toolTip = "Codex 至少間隔 1 分鐘、Claude 至少間隔 5 分鐘查詢；手動更新、重開與喚醒共用冷卻期限。倒數每 15 秒在本機更新。"
         let brand = brandLogo(size: 12)
-        brand.frame = NSRect(x: 160, y: 3, width: 12, height: 12)
+        brand.frame = NSRect(x: width - 20, y: 3, width: 12, height: 12)
         background.addSubview(brand)
-        panel.setFrame(NSRect(x: panel.frame.minX, y: top - height, width: 180, height: height), display: true)
         keepOnScreen()
         updateMenuNumbers()
     }
@@ -588,6 +624,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowDidMove(_ notification: Notification) {
         defaults.set(panel.frame.minX, forKey: "positionX")
         defaults.set(panel.frame.maxY, forKey: "positionTop")
+    }
+    func windowDidResize(_ notification: Notification) {
+        guard !isApplyingPanelSize, renderedCompact != nil else { return }
+        let prefix = compact ? "compact" : "expanded"
+        defaults.set(panel.frame.width, forKey: "\(prefix)Width")
+        defaults.set(panel.frame.height, forKey: "\(prefix)Height")
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool { sender.orderOut(nil); return false }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

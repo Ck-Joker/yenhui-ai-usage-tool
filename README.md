@@ -17,7 +17,7 @@
 
 ## 安裝與登入
 
-1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.1.1-AppleSilicon.dmg`。
+1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.1.2-AppleSilicon.dmg`。
 2. 開啟 DMG，將 **Subscription Pin.app** 拖到 **Applications**，再從「應用程式」開啟。
 3. 依首次使用引導，安裝並登入自己的 Codex。程式提供 [OpenAI 官方安裝說明](https://developers.openai.com/codex/app/)入口；官方下載頁目前使用 ChatGPT 桌面 App 名稱，既有 Codex App 也可使用。
 4. 依 [Claude Code 官方說明](https://code.claude.com/docs/en/quickstart)安裝 CLI。在終端機執行 `claude auth login`，於瀏覽器完成自己的帳號登入與驗證。僅登入 Claude 桌面聊天 App，可能不足以提供 CLI 的登入資訊。
@@ -30,12 +30,12 @@ DMG 內另外附有可離線開啟的「安裝與登入指南.html」。GitHub �
 
 ## 浮窗功能
 
-- **精簡顯示：**寬 180px，以小圖示區分平台，每筆額度一列。
+- **精簡顯示：**預設寬 180px、高度依額度列數收合，也可拖曳邊緣微調寬高；精簡版與完整版分開記住尺寸。
 - **重置倒數：**顯示「6日19時12分」等單行倒數，不顯示重置月日。
 - **保持最上層與鎖定：**可拖曳定位，再按圖釘與鎖頭，位置和偏好會保留。
 - **Fable 獨立列：**平台有提供才顯示，不把 Fable 用完誤當成整個 Claude 用完。
 - **完整資訊：**展開查看額度；選單可顯示 Codex 其他模型額度。
-- **言回識別：**精簡版只顯示言回 logo；完整資訊與引導顯示「言回有限公司開發」。
+- **言回識別：**精簡版只顯示言回 logo；完整資訊右下角顯示「言回有限公司」。
 
 ![完整用量資訊與言回開發署名](docs/images/expanded.jpg)
 

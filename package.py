@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 SOURCE = Path(__file__).resolve().parent
-VERSION = '1.1.1'
+VERSION = '1.1.2'
 
 
 def run(*args, **kwargs):
@@ -51,7 +51,7 @@ def main():
     (volume / 'Applications').symlink_to('/Applications')
     info = {'CFBundleIdentifier': 'tw.ckc.subscription-pin', 'CFBundleName': 'Subscription Pin',
             'CFBundleDisplayName': 'Subscription Pin', 'CFBundleExecutable': 'SubscriptionPin',
-            'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': VERSION, 'CFBundleVersion': '3',
+            'CFBundlePackageType': 'APPL', 'CFBundleShortVersionString': VERSION, 'CFBundleVersion': '4',
             'LSMinimumSystemVersion': '13.0', 'LSUIElement': True, 'NSHighResolutionCapable': True,
             'NSHumanReadableCopyright': '言回有限公司開發'}
     (contents / 'Info.plist').write_bytes(plistlib.dumps(info))
