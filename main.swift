@@ -25,6 +25,15 @@ struct Provider: Decodable {
 }
 struct Snapshot: Decodable { let providers: [Provider] }
 
+struct GitHubRelease: Decodable {
+    let tagName: String
+    let htmlURL: URL
+    enum CodingKeys: String, CodingKey {
+        case tagName = "tag_name"
+        case htmlURL = "html_url"
+    }
+}
+
 final class UsagePanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -61,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var stack: NSStackView!
     private var timer: Timer?
     private var displayTimer: Timer?
+    private var updateTimer: Timer?
     private var task: Process?
     private var snapshot: Snapshot?
     private var loading = false
@@ -111,6 +121,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         displayTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
             self?.render()
+        }
+        checkForUpdatesIfNeeded()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            self?.checkForUpdatesIfNeeded()
         }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(wake),
                 name: NSWorkspace.didWakeNotification, object: nil)
@@ -524,6 +538,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return logo
     }
 
+    private func versionComponents(_ value: String) -> [Int]? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingPrefix("v")
+        let parts = normalized.split(separator: ".")
+        guard !parts.isEmpty else { return nil }
+        let values = parts.map { part -> Int? in
+            let digits = part.prefix { $0.isNumber }
+            return digits.isEmpty ? nil : Int(digits)
+        }
+        guard values.allSatisfy({ $0 != nil }) else { return nil }
+        return values.compactMap { $0 }
+    }
+
+    private func isNewerVersion(_ candidate: String, than current: String) -> Bool {
+        guard var lhs = versionComponents(candidate), var rhs = versionComponents(current) else { return false }
+        let count = max(lhs.count, rhs.count)
+        lhs += Array(repeating: 0, count: count - lhs.count)
+        rhs += Array(repeating: 0, count: count - rhs.count)
+        return lhs.lexicographicallyPrecedes(rhs) == false && lhs != rhs
+    }
+
+    private func checkForUpdatesIfNeeded() {
+        let now = Date().timeIntervalSince1970
+        let lastCheck = defaults.double(forKey: "lastGitHubUpdateCheckAt")
+        guard now - lastCheck >= 86400 else { return }
+        // 先保存嘗試時間，避免網路失敗時密集重試；下一次最多在 24 小時後。
+        defaults.set(now, forKey: "lastGitHubUpdateCheckAt")
+        guard let url = URL(string: "https://api.github.com/repos/Ck-Joker/yenhui-ai-usage-tool/releases/latest") else { return }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("Subscription-Pin-Update-Check", forHTTPHeaderField: "User-Agent")
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        URLSession(configuration: configuration).dataTask(with: request) { [weak self] data, response, _ in
+            guard let self = self,
+                  let http = response as? HTTPURLResponse, http.statusCode == 200,
+                  let data = data,
+                  let release = try? JSONDecoder().decode(GitHubRelease.self, from: data),
+                  release.htmlURL.scheme == "https", release.htmlURL.host == "github.com",
+                  let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                  self.isNewerVersion(release.tagName, than: current) else { return }
+            DispatchQueue.main.async { self.presentUpdateRecommendation(release, current: current) }
+        }.resume()
+    }
+
+    private func presentUpdateRecommendation(_ release: GitHubRelease, current: String) {
+        let alert = NSAlert()
+        alert.messageText = "Subscription Pin 有新版本"
+        alert.informativeText = "目前版本為 \(current)，GitHub 最新版本為 \(release.tagName)。建議更新以取得最新功能與修正。"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "前往下載")
+        alert.addButton(withTitle: "稍後")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(release.htmlURL) }
+    }
+
     private func refresh() {
         guard defaults.bool(forKey: "usageConsent"), !loading else { return }
         loading = true
@@ -641,7 +711,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // adapter 的持久化排程統一控制連網；手動更新只讀尚在冷卻的快取。
         refresh()
     }
-    @objc private func wake() { nextRefresh = .distantPast; refresh() }
+    @objc private func wake() { nextRefresh = .distantPast; refresh(); checkForUpdatesIfNeeded() }
     @objc private func screensChanged() { keepOnScreen() }
     @objc private func toggleTopmost() { defaults.set(!topmost, forKey: "topmost"); applyWindowPreferences(); rebuildMenu(); render() }
     @objc private func toggleLock() { defaults.set(!locked, forKey: "locked"); applyWindowPreferences(); rebuildMenu(); render() }
@@ -661,7 +731,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationWillTerminate(_ notification: Notification) {
-        timer?.invalidate(); displayTimer?.invalidate()
+        timer?.invalidate(); displayTimer?.invalidate(); updateTimer?.invalidate()
         if let task = task, task.isRunning { task.terminate() }
     }
 }

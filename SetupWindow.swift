@@ -15,7 +15,7 @@ final class SetupWindow: NSWindowController {
         self.onFinish = onFinish
         self.onConsent = onConsent
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 610),
-                              styleMask: [.titled], backing: .buffered, defer: false)
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
         window.title = "Subscription Pin · 開始使用"
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -71,7 +71,7 @@ final class SetupWindow: NSWindowController {
         finishButton.isEnabled = false
         actions.addArrangedSubview(verifyButton)
         actions.addArrangedSubview(finishButton)
-        let exit = NSButton(title: "稍後再設定", target: NSApp, action: #selector(NSApplication.terminate(_:)))
+        let exit = NSButton(title: "稍後再設定", target: self, action: #selector(closeSetup))
         exit.bezelStyle = .rounded
         actions.addArrangedSubview(exit)
         content.addArrangedSubview(actions)
@@ -100,6 +100,8 @@ final class SetupWindow: NSWindowController {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    @objc private func closeSetup() { window?.performClose(nil) }
 
     @objc private func consentChanged() {
         let allowed = consent.state == .on

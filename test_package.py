@@ -25,6 +25,19 @@ class PackagePrivacyTests(unittest.TestCase):
         self.assertIn('row([spacer(), brandLogo(size: 16)', source)
         self.assertIn('label("言回有限公司", size: 10', source)
 
+    def test_daily_github_update_contract(self):
+        source = (Path(__file__).parent / 'main.swift').read_text()
+        self.assertIn('now - lastCheck >= 86400', source)
+        self.assertIn('api.github.com/repos/Ck-Joker/yenhui-ai-usage-tool/releases/latest', source)
+        self.assertIn('release.htmlURL.host == "github.com"', source)
+        self.assertIn('目前版本為', source)
+
+    def test_setup_window_can_close_without_quitting(self):
+        source = (Path(__file__).parent / 'SetupWindow.swift').read_text()
+        self.assertIn('styleMask: [.titled, .closable]', source)
+        self.assertIn('#selector(closeSetup)', source)
+        self.assertNotIn('#selector(NSApplication.terminate', source)
+
 
 if __name__ == '__main__':
     unittest.main()
