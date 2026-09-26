@@ -136,13 +136,15 @@ def parse_claude(result):
 
 
 def codex_path():
-    candidates = [os.environ.get('SUBSCRIPTION_PIN_CODEX', ''),
-                  '/Applications/ChatGPT.app/Contents/Resources/codex',
-                  '/Applications/Codex.app/Contents/Resources/codex',
-                  str(Path.home() / 'Applications/ChatGPT.app/Contents/Resources/codex'),
-                  str(Path.home() / 'Applications/Codex.app/Contents/Resources/codex'),
-                  shutil.which('codex') or '', '/opt/homebrew/bin/codex',
-                  '/usr/local/bin/codex', str(Path.home() / '.local/bin/codex')]
+    candidates = [os.environ.get('SUBSCRIPTION_PIN_CODEX', '')]
+    # 從 Finder 啟動不會繼承 shell PATH；同時支援新版內嵌 CLI 與舊版位置。
+    for root in [Path('/Applications'), Path.home() / 'Applications']:
+        for app in ['ChatGPT.app', 'Codex.app']:
+            resources = root / app / 'Contents/Resources'
+            candidates.extend(str(resources / relative) for relative in [
+                'codex-cli/CodexCLI.app/Contents/MacOS/codex', 'codex'])
+    candidates.extend([shutil.which('codex') or '', '/opt/homebrew/bin/codex',
+                       '/usr/local/bin/codex', str(Path.home() / '.local/bin/codex')])
     for path in candidates:
         if path and os.path.isfile(path) and os.access(path, os.X_OK):
             return path

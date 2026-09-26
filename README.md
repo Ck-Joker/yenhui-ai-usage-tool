@@ -17,7 +17,7 @@
 
 ## 安裝與登入
 
-1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.2.0-AppleSilicon.dmg`。
+1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.2.1-AppleSilicon.dmg`。
 2. 開啟 DMG，將 **Subscription Pin.app** 拖到 **Applications**，再從「應用程式」開啟。
 3. 依首次使用引導，安裝並登入自己的 Codex。程式提供 [OpenAI 官方安裝說明](https://developers.openai.com/codex/app/)入口；官方下載頁目前使用 ChatGPT 桌面 App 名稱，既有 Codex App 也可使用。
 4. 依 [Claude Code 官方說明](https://code.claude.com/docs/en/quickstart)安裝 CLI。在終端機執行 `claude auth login`，於瀏覽器完成自己的帳號登入與驗證。僅登入 Claude 桌面聊天 App，可能不足以提供 CLI 的登入資訊。

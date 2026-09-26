@@ -11,6 +11,40 @@ from unittest.mock import patch
 import usage
 
 
+class CodexPathTests(unittest.TestCase):
+    def locate(self, available, override='', cli='', executable=None):
+        with patch.dict(os.environ, {'SUBSCRIPTION_PIN_CODEX': override}, clear=True), \
+                patch.object(usage.Path, 'home', return_value=Path('/fixture/home')), \
+                patch.object(usage.shutil, 'which', return_value=cli), \
+                patch.object(usage.os.path, 'isfile', side_effect=lambda p: p in available), \
+                patch.object(usage.os, 'access', side_effect=lambda p, mode: p in (available if executable is None else executable)):
+            return usage.codex_path()
+
+    def test_app_bundles_without_shell_path(self):
+        for root in ['/Applications', '/fixture/home/Applications']:
+            for app in ['ChatGPT.app', 'Codex.app']:
+                for relative in ['codex-cli/CodexCLI.app/Contents/MacOS/codex', 'codex']:
+                    path = f'{root}/{app}/Contents/Resources/{relative}'
+                    with self.subTest(path=path):
+                        self.assertEqual(self.locate({path}), path)
+
+    def test_explicit_override_has_priority(self):
+        bundled = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'
+        self.assertEqual(self.locate({'/custom/codex', bundled}, override='/custom/codex'), '/custom/codex')
+
+    def test_cli_fallback(self):
+        self.assertEqual(self.locate({'/custom/bin/codex'}, cli='/custom/bin/codex'), '/custom/bin/codex')
+
+    def test_non_executable_bundle_is_skipped(self):
+        bundled = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'
+        self.assertEqual(self.locate({bundled, '/custom/codex'}, cli='/custom/codex',
+                                     executable={'/custom/codex'}), '/custom/codex')
+
+    def test_missing_executable_is_rejected(self):
+        with self.assertRaises(usage.UsageError):
+            self.locate(set())
+
+
 class ScheduleTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
