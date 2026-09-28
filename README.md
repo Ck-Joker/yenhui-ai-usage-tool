@@ -17,7 +17,7 @@
 
 ## 安裝與登入
 
-1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.2.1-AppleSilicon.dmg`。
+1. 從 [Releases](https://github.com/Ck-Joker/yenhui-ai-usage-tool/releases/latest) 下載 `Subscription-Pin-1.2.2-AppleSilicon.dmg`。
 2. 開啟 DMG，將 **Subscription Pin.app** 拖到 **Applications**，再從「應用程式」開啟。
 3. 依首次使用引導，安裝並登入自己的 Codex。程式提供 [OpenAI 官方安裝說明](https://developers.openai.com/codex/app/)入口；官方下載頁目前使用 ChatGPT 桌面 App 名稱，既有 Codex App 也可使用。
 4. 依 [Claude Code 官方說明](https://code.claude.com/docs/en/quickstart)安裝 CLI。在終端機執行 `claude auth login`，於瀏覽器完成自己的帳號登入與驗證。僅登入 Claude 桌面聊天 App，可能不足以提供 CLI 的登入資訊。
@@ -54,7 +54,7 @@ DMG 內另外附有可離線開啟的「安裝與登入指南.html」。GitHub �
 
 Claude 百分比可能有約 5 分鐘的更新延遲。其他工具的查詢也可能影響平台上限，因此無法保證永不出現限流。
 
-更新失敗或資料過期時，不會假裝顯示最新百分比；重置時間到了，也要等平台確認，不自行補成 100%。
+短暫查詢失敗時，若上一筆成功資料尚未過期，會保留原更新時間並繼續顯示該筆用量；資料過期或重置時間到了，則等待平台確認，不自行補成 100%。
 
 ## 登入與隱私
 

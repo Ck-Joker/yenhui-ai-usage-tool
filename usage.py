@@ -380,6 +380,18 @@ def scheduled_fetch(provider, fetcher, state_dir=None, clock=time.time):
                 result['updatedAt'] = clock()
             else:
                 result.pop('retryAfter', None)
+            # 短暫查詢失敗時沿用仍有效的上一筆資料；保留錯誤與原查詢時間。
+            previous_at = number(state.get('updatedAt'))
+            transient = (result.get('rateLimited') or result['error'] in (
+                'Codex 查詢逾時，下次會自動重試',
+                'Codex 連線結束，請開啟 Codex 檢查登入狀態',
+                '連線或資料解析失敗，請檢查網路與登入狀態') or
+                (result['error'] or '').startswith('Claude 服務暫時無法查詢'))
+            if (transient and previous_at is not None and
+                    0 <= clock() - previous_at < interval + 120 and
+                    isinstance(state.get('cards'), list) and state['cards']):
+                result['cards'] = state['cards']
+                result['updatedAt'] = previous_at
             result.update(version=1, failures=failures, nextAllowedAt=clock() + delay,
                           staleAfter=interval + 120, cached=False,
                           rateLimited=bool(result.get('rateLimited')))

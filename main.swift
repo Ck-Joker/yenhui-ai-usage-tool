@@ -306,7 +306,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             text.font = .systemFont(ofSize: 12)
             text.textColor = .secondaryLabelColor
             fullWidth(text, in: inner)
-        } else if windows.isEmpty {
+        }
+        if windows.isEmpty {
             fullWidth(label(loading ? "正在讀取訂閱額度…" : "尚未提供額度", color: .secondaryLabelColor), in: inner)
         } else {
             for (index, quota) in windows.enumerated() {
@@ -354,13 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let provider = snapshot?.providers.first { $0.provider == id }
             let cards = provider?.cards.filter { id != "codex" || showExtra || $0.id == "codex" } ?? []
             let error = failure ?? provider?.error
-            if cards.isEmpty || error != nil {
+            if cards.isEmpty {
                 fullWidth(cardView(name: id == "codex" ? "Codex" : "Claude Code", windows: [],
                                    updated: nil, error: error), in: stack)
             } else {
                 for card in cards {
                     fullWidth(cardView(name: card.name, windows: card.windows,
-                                       updated: provider?.updatedAt, error: nil,
+                                       updated: provider?.updatedAt, error: error,
                                        staleAfter: provider?.staleAfter ?? 180), in: stack)
                 }
             }
@@ -457,7 +458,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 (provider?.updatedAt.map { "；資料更新於 " + timeText($0) } ?? "") +
                 (provider?.nextAllowedAt.map { "；下次查詢：" + countdown($0) + "後" } ?? "")
             background.addSubview(icon)
-            if let error = failure ?? provider?.error {
+            if let error = failure ?? provider?.error, visibleWindows[index].isEmpty {
                 let message = provider?.rateLimited == true ? "查詢冷卻 · \(provider?.nextAllowedAt.map(countdown) ?? "稍後")" :
                     error.contains("登入") ? "請更新登入" : "暫時無法更新"
                 let field = addText(message,
@@ -502,7 +503,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func updateMenuNumbers() {
         func number(_ id: String) -> String {
             guard failure == nil, let p = snapshot?.providers.first(where: { $0.provider == id }),
-                  p.error == nil, !p.isStale else { return "—" }
+                  !p.isStale else { return "—" }
             let rows = p.cards.filter { id != "codex" || $0.id == "codex" }.flatMap { $0.windows }
                 .filter { id != "claude" || !$0.label.contains("Fable") }
             guard !rows.isEmpty, rows.allSatisfy({ $0.resetsAt.map { $0 > Date().timeIntervalSince1970 } ?? true }),
@@ -510,7 +511,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return String(format: "%.0f%%", floor(value))
         }
         var fable = ""
-        if failure == nil, let p = snapshot?.providers.first(where: { $0.provider == "claude" }), p.error == nil,
+        if failure == nil, let p = snapshot?.providers.first(where: { $0.provider == "claude" }),
            let quota = p.cards.flatMap({ $0.windows }).first(where: { $0.label == "Fable 每週" }) {
             let valid = !p.isStale &&
                 (quota.resetsAt.map { $0 > Date().timeIntervalSince1970 } ?? true)

@@ -120,6 +120,23 @@ class ScheduleTests(unittest.TestCase):
         self.query()
         self.assertEqual(self.calls, 0)
 
+    def test_transient_failure_keeps_only_fresh_previous_data(self):
+        first = self.query('codex')
+        def offline():
+            raise RuntimeError('FAKE_PRIVATE_VALUE')
+        self.now += 60
+        failed = self.query('codex', offline)
+        self.assertIsNotNone(failed['error'])
+        self.assertEqual(failed['cards'], first['cards'])
+        self.assertEqual(failed['updatedAt'], first['updatedAt'])
+        self.assertNotIn('FAKE_PRIVATE_VALUE', json.dumps(failed))
+        self.now += 60
+        self.query('codex', offline)
+        self.now += 60
+        stale = self.query('codex', offline)
+        self.assertEqual(stale['cards'], [])
+        self.assertIsNone(stale['updatedAt'])
+
     def test_interrupted_process_keeps_reservation(self):
         def interrupted():
             raise SystemExit()
